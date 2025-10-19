@@ -59,8 +59,28 @@ const ChatPage: React.FC = () => {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Failed to reach teaching assistant');
+        let errorDetails = 'Failed to reach teaching assistant';
+        const contentType = response.headers.get('content-type') || '';
+
+        try {
+          if (contentType.includes('application/json')) {
+            const errorJson = await response.json();
+            if (errorJson && typeof errorJson.error === 'string') {
+              errorDetails = errorJson.error;
+            } else if (typeof errorJson === 'string' && errorJson.trim()) {
+              errorDetails = errorJson.trim();
+            }
+          } else {
+            const errorText = await response.text();
+            if (errorText.trim()) {
+              errorDetails = errorText.trim();
+            }
+          }
+        } catch (parseError) {
+          console.warn('Unable to parse error response from teaching assistant:', parseError);
+        }
+
+        throw new Error(errorDetails || 'Failed to reach teaching assistant');
       }
 
       const data = await response.json();
@@ -76,13 +96,26 @@ const ChatPage: React.FC = () => {
       setMessages(prev => [...prev, aiMessage]);
     } catch (error) {
       console.error('AI chat error:', error);
-      const errorMessage: Message = {
+      const errorDescription = error instanceof Error ? error.message : 'Unknown error occurred';
+      const normalized = errorDescription.toLowerCase();
+
+      let troubleshootingTip = 'Please try again in a moment while we look into this.';
+
+      if (normalized.includes('failed to fetch') || normalized.includes('fetch failed') || normalized.includes('network')) {
+        troubleshootingTip = 'It looks like the SnapSyllabus server might be offline. Make sure the backend is running (npm run dev:backend or npm run server) and that you can reach http://localhost:3001/api/chat from your browser.';
+      } else if (normalized.includes('failed to generate ai response') || normalized.includes('bedrock') || normalized.includes('credential')) {
+        troubleshootingTip = 'The backend could not reach the Bedrock model. Double-check your AWS credentials or BEDROCK_API_KEY environment variables and review the server logs for details.';
+      }
+
+      const detailedMessage = `${troubleshootingTip}\n\nError details: ${errorDescription}`;
+
+      const errorReply: Message = {
         id: (Date.now() + 2).toString(),
-        text: 'Sorry, I ran into a problem while generating a response. Please try again in a moment.',
+        text: `Sorry, I ran into a problem while generating a response. ${detailedMessage}`,
         isAI: true,
         timestamp: new Date()
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => [...prev, errorReply]);
     } finally {
       setIsTyping(false);
     }

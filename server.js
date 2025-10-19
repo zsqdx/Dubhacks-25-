@@ -141,6 +141,9 @@ const normalizeConversationHistory = (history = []) =>
         {
           type: 'text',
           text: entry.text,
+          text: {
+            text: entry.text,
+          },
         },
       ],
     }));
@@ -160,6 +163,9 @@ app.post('/ai/chat', async (req, res) => {
         {
           type: 'text',
           text: prompt,
+          text: {
+            text: prompt,
+          },
         },
       ],
     });
@@ -192,6 +198,10 @@ app.post('/ai/chat', async (req, res) => {
       } else if (block?.reasoning?.reasoning_text) {
         reasoningText += (reasoningText ? '\n\n' : '') + block.reasoning.reasoning_text;
       } else if (block?.reasoningContent?.reasoningText) {
+      if (block?.text?.text) {
+        responseText += (responseText ? '\n\n' : '') + block.text.text;
+      }
+      if (block?.reasoningContent?.reasoningText) {
         reasoningText += (reasoningText ? '\n\n' : '') + block.reasoningContent.reasoningText;
       }
     });

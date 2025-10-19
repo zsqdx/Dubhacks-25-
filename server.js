@@ -4,12 +4,18 @@ import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import { S3Storage, generateId } from './s3Storage.js';
 import { OAuth2Client } from 'google-auth-library';
+import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 
 const app = express();
 const PORT = 3001;
 
 app.use(cors());
 app.use(express.json());
+
+// === Bedrock client ===
+const bedrock = new BedrockRuntimeClient({
+  region: process.env.BEDROCK_REGION || process.env.AWS_REGION || 'us-east-1',
+});
 
 // Google OAuth2 client
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -276,6 +282,76 @@ app.post('/auth/logout', (req, res) => {
   const sessionId = req.headers.authorization?.replace('Bearer ', '');
   sessions.delete(sessionId);
   res.json({ success: true });
+});
+
+// === AI Chat endpoint (Bedrock Converse) ===
+app.post(['/ai/chat','/api/ai/chat'], async (req, res) => {
+  try {
+    const { input, history, system, sessionId } = req.body || {};
+
+    // Optional: session gating if you use sessionIds in headers or body
+    if (sessionId) {
+      const session = sessions?.get?.(sessionId);
+      if (sessions && !session) return res.status(401).json({ error: 'Invalid session' });
+    }
+
+    const modelId = process.env.BEDROCK_MODEL_ID || 'meta.llama3-70b-instruct-v1:0';
+
+    // Build messages from history
+    let messages = Array.isArray(history) ? history.map(m => ({
+      role: m?.isAI ? 'assistant' : 'user',
+      content: [{ text: String(m?.text ?? '') }],
+    })) : [];
+
+    // Append the current user input
+    if (input && String(input).trim().length) {
+      messages.push({ role: 'user', content: [{ text: String(input) }] });
+    }
+
+    // Ensure conversation starts with a user message per Bedrock Converse
+    while (messages.length && messages[0].role !== 'user') {
+      messages.shift();
+    }
+    if (!messages.length) {
+      // No history or only assistant greeting existed; start fresh with current input
+      messages = [{ role: 'user', content: [{ text: String(input || '') }] }];
+    }
+
+    const cmd = new ConverseCommand({
+      modelId,
+      messages,
+      ...(system ? { system: [{ text: String(system) }] } : {}),
+      inferenceConfig: {
+        maxTokens: 1024,
+        temperature: 0.7,
+        topP: 0.9,
+      },
+    });
+
+    const resp = await bedrock.send(cmd);
+
+    const blocks = resp?.output?.message?.content || [];
+    const textBlock = blocks.find(b => b.text);
+    const textOut = textBlock?.text || "I couldn't generate a response.";
+
+    res.json({
+      success: true,
+      text: textOut,
+      meta: {
+        modelId,
+        inputTokens: resp?.usage?.inputTokens,
+        outputTokens: resp?.usage?.outputTokens,
+      },
+    });
+  } catch (err) {
+    console.error('Bedrock /ai/chat error', err);
+    res.status(500).json({ error: 'AI request failed' });
+  }
+});
+
+// === Health check ===
+app.get(['/health','/api/health'], (req, res) => {
+  res.json({ ok: true, time: new Date().toISOString() });
 });
 
 // ===== START SERVER =====

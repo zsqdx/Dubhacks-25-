@@ -12,6 +12,35 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+
+  // Email validation
+  const emailValidation = React.useMemo(() => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return {
+      isValid: emailRegex.test(email),
+      message: email && !emailRegex.test(email) ? 'Please enter a valid email address' : ''
+    };
+  }, [email]);
+
+  // Password validation
+  const passwordValidation = React.useMemo(() => {
+    const checks = {
+      length: password.length >= 8,
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
+      number: /[0-9]/.test(password),
+    };
+
+    const isValid = Object.values(checks).every(v => v);
+
+    return {
+      isValid,
+      checks,
+      message: !isValid && password ? 'Password does not meet requirements' : ''
+    };
+  }, [password]);
 
   const handleGoogleSuccess = async (credentialResponse: any) => {
     setLoading(true);
@@ -44,8 +73,22 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
 
   const handleCredentialsAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setEmailTouched(true);
+    setPasswordTouched(true);
     setError(null);
+
+    // Client-side validation
+    if (!emailValidation.isValid) {
+      setError('Please enter a valid email address');
+      return;
+    }
+
+    if (isSignup && !passwordValidation.isValid) {
+      setError('Please ensure your password meets all requirements');
+      return;
+    }
+
+    setLoading(true);
 
     const endpoint = isSignup ? '/auth/signup' : '/auth/login';
     const body = isSignup ? { email, password, name } : { email, password };
@@ -141,15 +184,21 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onBlur={() => setEmailTouched(true)}
             required
             style={{
               width: '100%',
               padding: '10px',
-              border: '1px solid #ddd',
+              border: `1px solid ${emailTouched && !emailValidation.isValid ? '#ef4444' : '#ddd'}`,
               borderRadius: '6px',
               fontSize: '14px',
             }}
           />
+          {emailTouched && emailValidation.message && (
+            <p style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}>
+              {emailValidation.message}
+            </p>
+          )}
         </div>
 
         <div style={{ marginBottom: '20px' }}>
@@ -160,15 +209,35 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onBlur={() => setPasswordTouched(true)}
             required
             style={{
               width: '100%',
               padding: '10px',
-              border: '1px solid #ddd',
+              border: `1px solid ${isSignup && passwordTouched && !passwordValidation.isValid ? '#ef4444' : '#ddd'}`,
               borderRadius: '6px',
               fontSize: '14px',
             }}
           />
+          {isSignup && passwordTouched && (
+            <div style={{ marginTop: '8px', fontSize: '12px' }}>
+              <p style={{ fontWeight: '500', marginBottom: '4px', color: '#555' }}>Password requirements:</p>
+              <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
+                <li style={{ color: passwordValidation.checks.length ? '#10b981' : '#ef4444' }}>
+                  At least 8 characters
+                </li>
+                <li style={{ color: passwordValidation.checks.uppercase ? '#10b981' : '#ef4444' }}>
+                  One uppercase letter
+                </li>
+                <li style={{ color: passwordValidation.checks.lowercase ? '#10b981' : '#ef4444' }}>
+                  One lowercase letter
+                </li>
+                <li style={{ color: passwordValidation.checks.number ? '#10b981' : '#ef4444' }}>
+                  One number
+                </li>
+              </ul>
+            </div>
+          )}
         </div>
 
         <button

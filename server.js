@@ -111,7 +111,50 @@ app.post('/auth/signup', async (req, res) => {
     return res.status(400).json({ error: 'Email, password, and name required' });
   }
 
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+
+  // Validate password requirements (min 8 chars, 1 uppercase, 1 lowercase, 1 number)
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+  }
+  if (!/[A-Z]/.test(password)) {
+    return res.status(400).json({ error: 'Password must contain at least one uppercase letter' });
+  }
+  if (!/[a-z]/.test(password)) {
+    return res.status(400).json({ error: 'Password must contain at least one lowercase letter' });
+  }
+  if (!/[0-9]/.test(password)) {
+    return res.status(400).json({ error: 'Password must contain at least one number' });
+  }
+
   try {
+    // Check for duplicate email
+    const { ListObjectsV2Command } = await import('@aws-sdk/client-s3');
+    const { S3Client } = await import('@aws-sdk/client-s3');
+    const s3Client = new S3Client({ region: process.env.AWS_REGION || 'us-east-2' });
+
+    const response = await s3Client.send(new ListObjectsV2Command({
+      Bucket: process.env.S3_BUCKET_NAME || 'dubhacks25-bucket',
+      Prefix: 'users/',
+    }));
+
+    // Check if email already exists
+    for (const obj of (response.Contents || [])) {
+      const key = obj.Key || '';
+      if (key.endsWith('/profile.json')) {
+        const userId = key.split('/')[1];
+        const profile = await S3Storage.getUserProfile(userId);
+
+        if (profile && profile.email.toLowerCase() === email.toLowerCase()) {
+          return res.status(400).json({ error: 'An account with this email already exists' });
+        }
+      }
+    }
+
     const userId = `cred_${generateId()}`;
     const passwordHash = await bcrypt.hash(password, 10);
 
@@ -153,6 +196,12 @@ app.post('/auth/login', async (req, res) => {
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password required' });
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Invalid email format' });
   }
 
   try {

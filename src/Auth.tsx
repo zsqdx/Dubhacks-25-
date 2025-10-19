@@ -85,7 +85,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
       backgroundColor: '#fff',
       boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
     }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '10px' }}>SnapSyllabus</h1>
+      <h1 style={{ textAlign: 'center', marginBottom: '10px' }}>CourseCompanion</h1>
       <p style={{ textAlign: 'center', color: '#666', marginBottom: '30px' }}>
         AI-powered study assistant for Canvas
       </p>

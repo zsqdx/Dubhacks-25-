@@ -25,30 +25,67 @@ const ChatPage: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const handleSend = () => {
-    if (!input.trim() || isTyping) return;
+  const handleSend = async () => {
+    const trimmed = input.trim();
+    if (!trimmed || isTyping) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      text: input,
+      text: trimmed,
       isAI: false,
       timestamp: new Date()
     };
-    setMessages([...messages, userMessage]);
+
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInput('');
     setIsTyping(true);
 
-    // Mock AI response with typing delay
-    setTimeout(() => {
+    const conversationPayload = updatedMessages.map(msg => ({
+      role: msg.isAI ? 'assistant' : 'user',
+      content: msg.text
+    }));
+
+    try {
+      const response = await fetch('http://localhost:3001/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          system: "You are a friendly and knowledgeable AI teaching assistant that helps students understand Canvas course material, generate study tips, and explain difficult concepts in approachable language.",
+          messages: conversationPayload
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to reach teaching assistant');
+      }
+
+      const data = await response.json();
+      const aiText = typeof data.text === 'string' ? data.text : 'I had trouble understanding that request, but I am here to help with anything else about your courses!';
+
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: `Great question about "${input}"! I'm analyzing your Canvas course data and learning patterns to provide you with a personalized response. (This is a demo - your backend will provide real AI responses!)`,
+        text: aiText,
         isAI: true,
         timestamp: new Date()
       };
+
       setMessages(prev => [...prev, aiMessage]);
+    } catch (error) {
+      console.error('AI chat error:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 2).toString(),
+        text: 'Sorry, I ran into a problem while generating a response. Please try again in a moment.',
+        isAI: true,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   return (

@@ -40,6 +40,16 @@ const ChatPage: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+  const transformHistoryForBedrock = (history: Message[]) =>
+    history
+      .filter((message) => message.text.trim())
+      .map((message) => ({
+        isAI: message.isAI,
+        text: message.text,
+      }));
+
   const c = {
     dark: {
       bg: '#0a0a0a',
@@ -73,31 +83,62 @@ const ChatPage: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const handleSend = () => {
-    if (!input.trim() || isTyping) return;
+  const handleSend = async () => {
+    const trimmedInput = input.trim();
+    if (!trimmedInput || isTyping) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      text: input,
+      text: trimmedInput,
       isAI: false,
       timestamp: new Date(),
       type: 'text'
     };
-    setMessages([...messages, userMessage]);
+
+    setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsTyping(true);
 
-    setTimeout(() => {
+    const historyForRequest = transformHistoryForBedrock([...messages, userMessage]);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/ai/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: trimmedInput,
+          history: historyForRequest,
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch AI response');
+      }
+
+      const data = await response.json();
+
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: `Let's review "${input}". Based on your Canvas progress, this ties into CS 201 – Data Structures. Here's a simplified explanation...`,
+        text: data.text || 'I was unable to generate a response this time, please try again.',
         isAI: true,
         timestamp: new Date(),
         type: 'text'
       };
+
       setMessages(prev => [...prev, aiResponse]);
+    } catch (error) {
+      console.error('AI tutor error', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 2).toString(),
+        text: 'I ran into an issue reaching Bedrock. Please try again in a moment.',
+        isAI: true,
+        timestamp: new Date(),
+        type: 'text'
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsTyping(false);
-    }, 1400);
+    }
   };
 
   return (

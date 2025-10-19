@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { S3Storage, generateId } from './s3Storage.js';
 import { OAuth2Client } from 'google-auth-library';
 
@@ -10,6 +11,190 @@ const PORT = 3001;
 
 app.use(cors());
 app.use(express.json());
+
+const BEDROCK_REGION = process.env.BEDROCK_REGION || process.env.AWS_REGION || 'us-east-1';
+const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'us.anthropic.claude-3-7-sonnet-20250219-v1:0';
+const BEDROCK_API_KEY = process.env.BEDROCK_API_KEY || process.env.AWS_BEDROCK_API_KEY || null;
+
+const awsAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
+const awsSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+const awsSessionToken = process.env.AWS_SESSION_TOKEN;
+
+const ensureBedrockCredentials = () => {
+  if (!awsAccessKeyId || !awsSecretAccessKey) {
+    throw new Error('Bedrock credentials are not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.');
+  }
+};
+
+const hmacSha256 = (key, data) => crypto.createHmac('sha256', key).update(data, 'utf8').digest();
+const sha256Hex = (data) => crypto.createHash('sha256').update(data, 'utf8').digest('hex');
+
+const getSignatureKey = (secretKey, dateStamp, regionName, serviceName) => {
+  const kDate = hmacSha256(`AWS4${secretKey}`, dateStamp);
+  const kRegion = hmacSha256(kDate, regionName);
+  const kService = hmacSha256(kRegion, serviceName);
+  return hmacSha256(kService, 'aws4_request');
+};
+
+const signBedrockRequest = (method, path, body, now = new Date()) => {
+  ensureBedrockCredentials();
+
+  const service = 'bedrock';
+  const host = `bedrock-runtime.${BEDROCK_REGION}.amazonaws.com`;
+  const endpoint = `https://${host}${path}`;
+
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '') + 'Z';
+  const dateStamp = amzDate.substring(0, 8);
+
+  const payloadHash = sha256Hex(body);
+
+  const canonicalHeadersMap = [
+    ['content-type', 'application/json'],
+    ['host', host],
+    ['x-amz-date', amzDate],
+  ];
+
+  if (awsSessionToken) {
+    canonicalHeadersMap.push(['x-amz-security-token', awsSessionToken]);
+  }
+
+  if (BEDROCK_API_KEY) {
+    canonicalHeadersMap.push(['x-amz-api-key', BEDROCK_API_KEY]);
+  }
+
+  canonicalHeadersMap.sort((a, b) => a[0].localeCompare(b[0]));
+
+  const canonicalHeaders = canonicalHeadersMap.map(([key, value]) => `${key}:${value.trim()}\n`).join('');
+  const signedHeaders = canonicalHeadersMap.map(([key]) => key).join(';');
+
+  const canonicalRequest = [
+    method,
+    path,
+    '',
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join('\n');
+
+  const algorithm = 'AWS4-HMAC-SHA256';
+  const credentialScope = `${dateStamp}/${BEDROCK_REGION}/${service}/aws4_request`;
+  const stringToSign = [
+    algorithm,
+    amzDate,
+    credentialScope,
+    sha256Hex(canonicalRequest),
+  ].join('\n');
+
+  const signingKey = getSignatureKey(awsSecretAccessKey, dateStamp, BEDROCK_REGION, service);
+  const signature = crypto.createHmac('sha256', signingKey).update(stringToSign, 'utf8').digest('hex');
+
+  const authorizationHeader = `${algorithm} Credential=${awsAccessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Amz-Date': amzDate,
+    Authorization: authorizationHeader,
+  };
+
+  if (awsSessionToken) {
+    headers['X-Amz-Security-Token'] = awsSessionToken;
+  }
+
+  if (BEDROCK_API_KEY) {
+    headers['X-Amz-Api-Key'] = BEDROCK_API_KEY;
+  }
+
+  return { endpoint, headers };
+};
+
+const callBedrockConverse = async (messages, reasoningConfig = { thinking: { type: 'enabled', budget_tokens: 2000 } }) => {
+  const path = `/model/${encodeURIComponent(BEDROCK_MODEL_ID)}/converse`;
+  const payload = JSON.stringify({
+    messages,
+    additionalModelRequestFields: reasoningConfig,
+  });
+
+  const { endpoint, headers } = signBedrockRequest('POST', path, payload);
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body: payload,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Bedrock request failed: ${response.status} ${response.statusText} - ${errorText}`);
+  }
+
+  return response.json();
+};
+
+const normalizeConversationHistory = (history = []) =>
+  history
+    .filter((entry) => entry && typeof entry.text === 'string' && entry.text.trim())
+    .map((entry) => ({
+      role: entry.isAI ? 'assistant' : 'user',
+      content: [
+        {
+          text: {
+            text: entry.text,
+          },
+        },
+      ],
+    }));
+
+app.post('/ai/chat', async (req, res) => {
+  const { prompt, history, reasoningBudget } = req.body;
+
+  if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+    return res.status(400).json({ error: 'Prompt is required.' });
+  }
+
+  try {
+    const normalizedHistory = normalizeConversationHistory(history);
+    normalizedHistory.push({
+      role: 'user',
+      content: [
+        {
+          text: {
+            text: prompt,
+          },
+        },
+      ],
+    });
+
+    const reasoningConfig = reasoningBudget
+      ? { thinking: { type: 'enabled', budget_tokens: Number(reasoningBudget) || 2000 } }
+      : { thinking: { type: 'enabled', budget_tokens: 2000 } };
+
+    const bedrockResponse = await callBedrockConverse(normalizedHistory, reasoningConfig);
+
+    const outputMessage = bedrockResponse?.output?.message;
+    const contentBlocks = Array.isArray(outputMessage?.content) ? outputMessage.content : [];
+
+    let responseText = '';
+    let reasoningText = '';
+
+    contentBlocks.forEach((block) => {
+      if (block?.text?.text) {
+        responseText += (responseText ? '\n\n' : '') + block.text.text;
+      }
+      if (block?.reasoningContent?.reasoningText) {
+        reasoningText += (reasoningText ? '\n\n' : '') + block.reasoningContent.reasoningText;
+      }
+    });
+
+    res.json({
+      text: responseText || 'I was unable to generate a response.',
+      reasoning: reasoningText || null,
+      raw: bedrockResponse,
+    });
+  } catch (error) {
+    console.error('Bedrock chat error:', error);
+    res.status(500).json({ error: 'Failed to generate AI response.' });
+  }
+});
 
 // Google OAuth2 client
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);

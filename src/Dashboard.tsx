@@ -6,9 +6,12 @@ import Navbar from './Navbar';
 interface DashboardProps {
   user: any;
   canvasToken: string | null;
+  sessionId?: string;
+  onLogout?: () => void;
+  onReconnectCanvas?: () => void;
 }
 
-export default function Dashboard({ user, canvasToken }: DashboardProps) {
+export default function Dashboard({ user, canvasToken, onLogout }: DashboardProps) {
   const { theme } = useTheme();
 
   const colors = {
@@ -32,9 +35,9 @@ export default function Dashboard({ user, canvasToken }: DashboardProps) {
   const c = colors[theme];
 
   return (
-    <div style={{ background: c.bg, minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ background: c.bg, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* ✅ Navbar added here */}
-      <Navbar />
+      <Navbar onLogout={onLogout} />
 
       {/* Page content */}
       <div
@@ -44,6 +47,7 @@ export default function Dashboard({ user, canvasToken }: DashboardProps) {
           display: 'flex',
           flexDirection: 'column',
           gap: '40px',
+          overflowY: 'auto',
         }}
       >
         {/* Header */}

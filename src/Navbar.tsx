@@ -1,9 +1,13 @@
 import React from "react";
-import { Moon, Sun, MessageSquare, LayoutDashboard } from "lucide-react";
+import { Moon, Sun, MessageSquare, LayoutDashboard, LogOut } from "lucide-react";
 import { useTheme } from "./App";
 import { Link, useLocation } from "react-router-dom";
 
-export default function Navbar() {
+interface NavbarProps {
+  onLogout?: () => void;
+}
+
+export default function Navbar({ onLogout }: NavbarProps = {}) {
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
 
@@ -78,22 +82,56 @@ export default function Navbar() {
         </Link>
       </div>
 
-      {/* Right: Theme Toggle */}
-      <button
-        onClick={toggleTheme}
-        style={{
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          color: c.text,
-          padding: "6px",
-          display: "flex",
-          alignItems: "center",
-        }}
-        title={theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
-      >
-        {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
-      </button>
+      {/* Right: Theme Toggle & Logout */}
+      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <button
+          onClick={toggleTheme}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            color: c.text,
+            padding: "6px",
+            display: "flex",
+            alignItems: "center",
+          }}
+          title={theme === "light" ? "Switch to Dark Mode" : "Switch to Light Mode"}
+        >
+          {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
+        </button>
+
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            style={{
+              background: "none",
+              border: `1px solid ${c.border}`,
+              borderRadius: "8px",
+              cursor: "pointer",
+              color: c.textSecondary,
+              padding: "6px 12px",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              fontSize: "14px",
+              fontWeight: 500,
+              transition: "all 0.2s",
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.borderColor = c.accent;
+              e.currentTarget.style.color = c.accent;
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.borderColor = c.border;
+              e.currentTarget.style.color = c.textSecondary;
+            }}
+            title="Logout"
+          >
+            <LogOut size={16} />
+            Logout
+          </button>
+        )}
+      </div>
     </nav>
   );
 }

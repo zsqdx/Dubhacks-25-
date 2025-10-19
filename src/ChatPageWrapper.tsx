@@ -27,9 +27,9 @@ export default function ChatPageWrapper({ user, onLogout }: ChatPageWrapperProps
         flexDirection: 'column',
       }}
     >
-      <Navbar />
+      <Navbar onLogout={onLogout} />
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <ChatPage />
+        <ChatPage user={user} />
       </div>
     </div>
   );

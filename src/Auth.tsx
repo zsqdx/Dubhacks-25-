@@ -80,16 +80,23 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      height: '100vh',
+      width: '100vw',
       background: c.bg,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       padding: '24px',
+      overflow: 'hidden',
+      position: 'fixed',
+      top: 0,
+      left: 0,
     }}>
       <div style={{
         width: '100%',
         maxWidth: '420px',
+        maxHeight: 'calc(100vh - 48px)',
+        overflowY: 'auto',
         background: c.cardBg,
         border: `1px solid ${c.border}`,
         borderRadius: '12px',

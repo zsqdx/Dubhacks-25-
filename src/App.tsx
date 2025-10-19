@@ -116,24 +116,13 @@ export default function App() {
             font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           }
           ::-webkit-scrollbar {
-            width: 10px;
-            height: 10px;
+            width: 0px;
+            height: 0px;
+            display: none;
           }
-          ::-webkit-scrollbar-track {
-            background: ${theme === 'dark'
-              ? 'rgba(255, 255, 255, 0.05)'
-              : 'rgba(0, 0, 0, 0.05)'};
-          }
-          ::-webkit-scrollbar-thumb {
-            background: ${theme === 'dark'
-              ? 'rgba(139, 92, 246, 0.5)'
-              : 'rgba(139, 92, 246, 0.3)'};
-            border-radius: 5px;
-          }
-          ::-webkit-scrollbar-thumb:hover {
-            background: ${theme === 'dark'
-              ? 'rgba(139, 92, 246, 0.7)'
-              : 'rgba(139, 92, 246, 0.5)'};
+          * {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
           }
           *:focus-visible {
             outline: 2px solid #8b5cf6;

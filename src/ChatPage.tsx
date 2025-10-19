@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTheme } from './App';
 import { Lightbulb, BookOpen, MessageSquare, Send, Plus } from 'lucide-react';
-import Navbar from './Navbar';
 
 interface Message {
   id: string;
@@ -18,7 +17,11 @@ interface QuickPrompt {
   prompt: string;
 }
 
-const ChatPage: React.FC = () => {
+interface ChatPageProps {
+  user?: any;
+}
+
+const ChatPage: React.FC<ChatPageProps> = ({ user }) => {
   const { theme } = useTheme();
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -139,20 +142,22 @@ const ChatPage: React.FC = () => {
   // -------------------------------
 
   return (
-    <div style={{ background: c.bg, color: c.text, height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Navbar />
+    <div style={{ background: c.bg, color: c.text, height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Sidebar pinned */}
         {showSidebar && (
           <aside
             style={{
               width: '260px',
+              minWidth: '260px',
+              maxWidth: '260px',
               background: c.sidebarBg,
               borderRight: `1px solid ${c.border}`,
               padding: '20px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
+              overflow: 'hidden',
             }}
           >
             <div>
@@ -258,7 +263,7 @@ const ChatPage: React.FC = () => {
                   marginBottom: '24px',
                 }}
               >
-                How are you today, Mazin?
+                How are you today, {user?.name?.split(' ')[0] || 'there'}?
               </h1>
             </div>
           )}

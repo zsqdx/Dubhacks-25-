@@ -4,7 +4,10 @@ import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import { S3Storage, generateId } from './s3Storage.js';
 import { OAuth2Client } from 'google-auth-library';
-import { generateToken, authenticateToken } from './jwtUtils.js';
+import { defaultProvider } from '@aws-sdk/credential-provider-node';
+import { SignatureV4 } from '@smithy/signature-v4';
+import { Sha256 } from '@aws-crypto/sha256-js';
+import { HttpRequest } from '@smithy/protocol-http';
 
 const app = express();
 const PORT = 3001;
@@ -12,8 +15,152 @@ const PORT = 3001;
 app.use(cors());
 app.use(express.json());
 
+const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || 'anthropic.claude-3-7-sonnet-20250219-v1:0';
+const BEDROCK_REGION = process.env.BEDROCK_REGION || process.env.AWS_REGION || 'us-east-1';
+const BEDROCK_API_KEY = process.env.BEDROCK_API_KEY || process.env.API_KEY || null;
+const BEDROCK_ENDPOINT = process.env.BEDROCK_API_URL || `https://bedrock-runtime.${BEDROCK_REGION}.amazonaws.com/model/${BEDROCK_MODEL_ID}/invoke`;
+const awsCredentialProvider = defaultProvider();
+
+const buildAnthropicMessages = (messages = []) => {
+  const prepared = messages
+    .filter(
+      (msg) =>
+        msg &&
+        typeof msg === 'object' &&
+        typeof msg.role === 'string' &&
+        typeof msg.content === 'string'
+    )
+    .map((msg) => ({
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
+      content: [
+        {
+          type: 'text',
+          text: msg.content,
+        },
+      ],
+    }));
+
+  const firstUserIndex = prepared.findIndex((msg) => msg.role === 'user');
+  if (firstUserIndex === -1) {
+    return [];
+  }
+
+  return prepared.slice(firstUserIndex);
+};
+
+const extractTextFromBedrockResponse = (payload) => {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  if (Array.isArray(payload.content)) {
+    const parts = payload.content
+      .filter((part) => part && part.type === 'text' && typeof part.text === 'string')
+      .map((part) => part.text.trim());
+    if (parts.length > 0) {
+      return parts.join('\n\n').trim();
+    }
+  }
+
+  if (typeof payload.output_text === 'string') {
+    return payload.output_text.trim();
+  }
+
+  if (typeof payload.result === 'string') {
+    return payload.result.trim();
+  }
+
+  return null;
+};
+
+const invokeBedrockWithAwsCredentials = async (body) => {
+  const request = new HttpRequest({
+    method: 'POST',
+    protocol: 'https:',
+    hostname: `bedrock-runtime.${BEDROCK_REGION}.amazonaws.com`,
+    path: `/model/${BEDROCK_MODEL_ID}/invoke`,
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body,
+  });
+
+  const signer = new SignatureV4({
+    service: 'bedrock',
+    region: BEDROCK_REGION,
+    credentials: awsCredentialProvider,
+    sha256: Sha256,
+  });
+
+  const signedRequest = await signer.sign(request);
+  const { protocol, hostname, path, headers, body: signedBody, method } = signedRequest;
+  const url = `${protocol}//${hostname}${path}`;
+
+  const fetchHeaders = { ...headers };
+  delete fetchHeaders.host;
+  delete fetchHeaders.Host;
+
+  const response = await fetch(url, {
+    method,
+    headers: fetchHeaders,
+    body: signedBody,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Bedrock request failed (${response.status}): ${errorText}`);
+  }
+
+  return response.json();
+};
+
+const invokeClaude = async ({ system, messages }) => {
+  const preparedMessages = buildAnthropicMessages(messages).slice(-12);
+
+  if (preparedMessages.length === 0) {
+    throw new Error('No messages to send to Claude');
+  }
+
+  const payload = {
+    anthropic_version: 'bedrock-2023-05-31',
+    max_tokens: 1024,
+    temperature: 0.3,
+    system: typeof system === 'string' && system.trim() ? system : undefined,
+    messages: preparedMessages,
+  };
+
+  const body = JSON.stringify(payload);
+
+  if (BEDROCK_API_KEY) {
+    const response = await fetch(BEDROCK_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'x-api-key': BEDROCK_API_KEY,
+      },
+      body,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Bedrock request failed (${response.status}): ${errorText}`);
+    }
+
+    const json = await response.json();
+    return extractTextFromBedrockResponse(json);
+  }
+
+  const json = await invokeBedrockWithAwsCredentials(body);
+  return extractTextFromBedrockResponse(json);
+};
+
 // Google OAuth2 client
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// In-memory session storage (for hackathon - use Redis/DynamoDB in production)
+const sessions = new Map();
 
 // ===== CANVAS API PROXY =====
 
@@ -45,6 +192,29 @@ app.use('/canvas-api', async (req, res) => {
   } catch (error) {
     console.error('Proxy error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== AI CHAT ENDPOINT =====
+
+app.post('/api/chat', async (req, res) => {
+  const { messages, system } = req.body || {};
+
+  if (!Array.isArray(messages)) {
+    return res.status(400).json({ error: 'messages array is required' });
+  }
+
+  try {
+    const text = await invokeClaude({ messages, system });
+
+    if (!text) {
+      return res.status(502).json({ error: 'Claude returned an empty response' });
+    }
+
+    res.json({ text });
+  } catch (error) {
+    console.error('AI chat error:', error);
+    res.status(500).json({ error: 'Failed to generate AI response' });
   }
 });
 
@@ -80,17 +250,12 @@ app.post('/auth/google', async (req, res) => {
       await S3Storage.saveUserProfile(profile);
     }
 
-    // Generate JWT token
-    const token = generateToken({
-      userId,
-      email,
-      name,
-      authProvider: 'google'
-    });
+    const sessionId = generateId();
+    sessions.set(sessionId, { userId, email, name });
 
     res.json({
       success: true,
-      token,
+      sessionId,
       canvasToken: profile.canvasToken || null,
       user: {
         userId,
@@ -114,50 +279,7 @@ app.post('/auth/signup', async (req, res) => {
     return res.status(400).json({ error: 'Email, password, and name required' });
   }
 
-  // Validate email format
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return res.status(400).json({ error: 'Invalid email format' });
-  }
-
-  // Validate password requirements (min 8 chars, 1 uppercase, 1 lowercase, 1 number)
-  if (password.length < 8) {
-    return res.status(400).json({ error: 'Password must be at least 8 characters long' });
-  }
-  if (!/[A-Z]/.test(password)) {
-    return res.status(400).json({ error: 'Password must contain at least one uppercase letter' });
-  }
-  if (!/[a-z]/.test(password)) {
-    return res.status(400).json({ error: 'Password must contain at least one lowercase letter' });
-  }
-  if (!/[0-9]/.test(password)) {
-    return res.status(400).json({ error: 'Password must contain at least one number' });
-  }
-
   try {
-    // Check for duplicate email
-    const { ListObjectsV2Command } = await import('@aws-sdk/client-s3');
-    const { S3Client } = await import('@aws-sdk/client-s3');
-    const s3Client = new S3Client({ region: process.env.AWS_REGION || 'us-east-2' });
-
-    const response = await s3Client.send(new ListObjectsV2Command({
-      Bucket: process.env.S3_BUCKET_NAME || 'dubhacks25-bucket',
-      Prefix: 'users/',
-    }));
-
-    // Check if email already exists
-    for (const obj of (response.Contents || [])) {
-      const key = obj.Key || '';
-      if (key.endsWith('/profile.json')) {
-        const userId = key.split('/')[1];
-        const profile = await S3Storage.getUserProfile(userId);
-
-        if (profile && profile.email.toLowerCase() === email.toLowerCase()) {
-          return res.status(400).json({ error: 'An account with this email already exists' });
-        }
-      }
-    }
-
     const userId = `cred_${generateId()}`;
     const passwordHash = await bcrypt.hash(password, 10);
 
@@ -174,17 +296,12 @@ app.post('/auth/signup', async (req, res) => {
 
     await S3Storage.saveUserProfile(profile);
 
-    // Generate JWT token
-    const token = generateToken({
-      userId,
-      email,
-      name,
-      authProvider: 'credentials'
-    });
+    const sessionId = generateId();
+    sessions.set(sessionId, { userId, email, name });
 
     res.json({
       success: true,
-      token,
+      sessionId,
       canvasToken: null,
       user: {
         userId,
@@ -204,12 +321,6 @@ app.post('/auth/login', async (req, res) => {
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password required' });
-  }
-
-  // Validate email format
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return res.status(400).json({ error: 'Invalid email format' });
   }
 
   try {
@@ -254,17 +365,16 @@ app.post('/auth/login', async (req, res) => {
     foundProfile.lastLogin = new Date().toISOString();
     await S3Storage.saveUserProfile(foundProfile);
 
-    // Generate JWT token
-    const token = generateToken({
+    const sessionId = generateId();
+    sessions.set(sessionId, {
       userId: foundUserId,
       email: foundProfile.email,
       name: foundProfile.name,
-      authProvider: 'credentials'
     });
 
     res.json({
       success: true,
-      token,
+      sessionId,
       canvasToken: foundProfile.canvasToken || null,
       user: {
         userId: foundUserId,
@@ -281,9 +391,13 @@ app.post('/auth/login', async (req, res) => {
 
 // ===== CANVAS TOKEN SETUP =====
 
-app.post('/auth/setup-canvas', authenticateToken, async (req, res) => {
-  const { canvasToken } = req.body;
-  const { userId } = req.user;
+app.post('/auth/setup-canvas', async (req, res) => {
+  const { sessionId, canvasToken } = req.body;
+
+  const session = sessions.get(sessionId);
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
 
   try {
     const canvasResponse = await fetch('https://canvas.instructure.com/api/v1/users/self', {
@@ -298,7 +412,7 @@ app.post('/auth/setup-canvas', authenticateToken, async (req, res) => {
 
     const canvasUser = await canvasResponse.json();
 
-    await S3Storage.updateCanvasToken(userId, canvasToken, canvasUser.id);
+    await S3Storage.updateCanvasToken(session.userId, canvasToken, canvasUser.id);
 
     res.json({
       success: true,
@@ -315,19 +429,20 @@ app.post('/auth/setup-canvas', authenticateToken, async (req, res) => {
 
 // ===== SESSION MANAGEMENT =====
 
-app.get('/auth/session', authenticateToken, (req, res) => {
-  // JWT middleware already validated the token and added user to req.user
-  const { userId, email, name, authProvider } = req.user;
+app.get('/auth/session', (req, res) => {
+  const sessionId = req.headers.authorization?.replace('Bearer ', '');
 
-  res.json({
-    success: true,
-    user: { userId, email, name, authProvider }
-  });
+  const session = sessions.get(sessionId);
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session' });
+  }
+
+  res.json({ success: true, user: session });
 });
 
 app.post('/auth/logout', (req, res) => {
-  // For JWT, logout is handled client-side by removing the token
-  // No server-side action needed since tokens are stateless
+  const sessionId = req.headers.authorization?.replace('Bearer ', '');
+  sessions.delete(sessionId);
   res.json({ success: true });
 });
 

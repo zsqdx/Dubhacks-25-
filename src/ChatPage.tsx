@@ -3,6 +3,31 @@ import { useTheme } from './App';
 import { Lightbulb, BookOpen, MessageSquare, Send, Plus } from 'lucide-react';
 import Navbar from './Navbar';
 
+async function fetchAI(base: string, body: any) {
+  const paths = ['/ai/chat', '/api/ai/chat'];
+  let lastErr: any = null;
+  for (const path of paths) {
+    try {
+      const resp = await fetch(`${base}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const contentType = resp.headers.get('content-type') || '';
+      const raw = await resp.text();
+      if (!contentType.includes('application/json')) {
+        lastErr = new Error(`Non-JSON from ${path} (${resp.status}). First bytes: ${raw.slice(0, 200)}`);
+        continue;
+      }
+      const data = JSON.parse(raw);
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      return data;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('All endpoints failed');
+}
 interface Message {
   id: string;
   text: string;
@@ -73,7 +98,7 @@ const ChatPage: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim() || isTyping) return;
 
     const userMessage: Message = {
@@ -87,17 +112,59 @@ const ChatPage: React.FC = () => {
     setInput('');
     setIsTyping(true);
 
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        text: `Let's review "${input}". Based on your Canvas progress, this ties into CS 201 – Data Structures. Here's a simplified explanation...`,
-        isAI: true,
-        timestamp: new Date(),
-        type: 'text'
-      };
-      setMessages(prev => [...prev, aiResponse]);
-      setIsTyping(false);
-    }, 1400);
+try {
+  const sessionId = localStorage.getItem('sessionId') || undefined;
+
+  // Keep a compact history (last 10 turns)
+  const historyForServer = messages.slice(-10).map(m => ({
+    isAI: m.isAI,
+    text: m.text,
+  }));
+
+  const base = (import.meta as any)?.env?.VITE_API_BASE || 'http://localhost:3001';
+  const resp = await fetch(`${base}/ai/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      sessionId,
+      history: historyForServer,
+      input,
+      system: "You are a helpful CS tutor. Be clear, concise, and friendly.",
+    }),
+  });
+
+  const contentType = resp.headers.get('content-type') || '';
+  const raw = await resp.text();
+
+  if (!contentType.includes('application/json')) {
+    throw new Error(`Server returned non-JSON (${resp.status}). First bytes: ${raw.slice(0, 200)}`);
+  }
+
+  const data = JSON.parse(raw);
+  if (!resp.ok) {
+    throw new Error(data?.error || 'AI request failed');
+  }
+
+  const aiResponse: Message = {
+    id: (Date.now() + 1).toString(),
+    text: data.text || 'No text returned.',
+    isAI: true,
+    timestamp: new Date(),
+    type: 'text',
+  };
+
+  setMessages(prev => [...prev, aiResponse]);
+} catch (e: any) {
+  setMessages(prev => [...prev, {
+    id: (Date.now() + 2).toString(),
+    text: `Error: ${e.message}`,
+    isAI: true,
+    timestamp: new Date(),
+    type: 'text',
+  }]);
+} finally {
+  setIsTyping(false);
+}
   };
 
   return (

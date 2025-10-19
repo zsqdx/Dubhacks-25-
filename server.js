@@ -290,62 +290,61 @@ app.post(['/ai/chat','/api/ai/chat'], async (req, res) => {
     const { input, history, system, sessionId } = req.body || {};
 
     // Optional: session gating if you use sessionIds in headers or body
+    let userId = null;
+    let canvasToken = null;
+
     if (sessionId) {
       const session = sessions?.get?.(sessionId);
       if (sessions && !session) return res.status(401).json({ error: 'Invalid session' });
+      userId = session?.userId;
+
+      // Get Canvas token from user profile
+      if (userId) {
+        const profile = await S3Storage.getUserProfile(userId);
+        canvasToken = profile?.canvasToken;
+      }
     }
 
-    const modelId = process.env.BEDROCK_MODEL_ID || 'meta.llama3-70b-instruct-v1:0';
+    // Use Bedrock Agent API Gateway endpoint
+    const agentEndpoint = process.env.BEDROCK_AGENT_ENDPOINT || 'https://nan7ktpnnf.execute-api.us-west-2.amazonaws.com/prod/chat';
 
-    // Build messages from history
-    let messages = Array.isArray(history) ? history.map(m => ({
-      role: m?.isAI ? 'assistant' : 'user',
-      content: [{ text: String(m?.text ?? '') }],
-    })) : [];
+    const agentRequest = {
+      message: input,
+      userId: userId || `anonymous_${generateId()}`,
+      canvasToken: canvasToken || process.env.DEFAULT_CANVAS_TOKEN || '',
+      sessionId: sessionId || `chat-${Date.now()}-${generateId()}`
+    };
 
-    // Append the current user input
-    if (input && String(input).trim().length) {
-      messages.push({ role: 'user', content: [{ text: String(input) }] });
-    }
+    console.log('Calling Bedrock Agent:', agentEndpoint);
 
-    // Ensure conversation starts with a user message per Bedrock Converse
-    while (messages.length && messages[0].role !== 'user') {
-      messages.shift();
-    }
-    if (!messages.length) {
-      // No history or only assistant greeting existed; start fresh with current input
-      messages = [{ role: 'user', content: [{ text: String(input || '') }] }];
-    }
-
-    const cmd = new ConverseCommand({
-      modelId,
-      messages,
-      ...(system ? { system: [{ text: String(system) }] } : {}),
-      inferenceConfig: {
-        maxTokens: 1024,
-        temperature: 0.7,
-        topP: 0.9,
+    const agentResponse = await fetch(agentEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify(agentRequest),
     });
 
-    const resp = await bedrock.send(cmd);
+    if (!agentResponse.ok) {
+      const errorText = await agentResponse.text();
+      console.error('Bedrock Agent error:', agentResponse.status, errorText);
+      throw new Error(`Agent request failed: ${agentResponse.status}`);
+    }
 
-    const blocks = resp?.output?.message?.content || [];
-    const textBlock = blocks.find(b => b.text);
-    const textOut = textBlock?.text || "I couldn't generate a response.";
+    const agentData = await agentResponse.json();
 
     res.json({
       success: true,
-      text: textOut,
+      text: agentData.message || "I couldn't generate a response.",
       meta: {
-        modelId,
-        inputTokens: resp?.usage?.inputTokens,
-        outputTokens: resp?.usage?.outputTokens,
+        modelId: 'bedrock-agent',
+        agentSessionId: agentData.sessionId,
+        citations: agentData.citations || [],
       },
     });
   } catch (err) {
-    console.error('Bedrock /ai/chat error', err);
-    res.status(500).json({ error: 'AI request failed' });
+    console.error('Bedrock Agent /ai/chat error', err);
+    res.status(500).json({ error: 'AI request failed: ' + err.message });
   }
 });
 

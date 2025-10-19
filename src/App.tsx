@@ -68,8 +68,9 @@ export default function App() {
     setUser(newUser);
     localStorage.setItem('sessionId', newSessionId);
 
+    // Check for existing Canvas token in localStorage
     const savedCanvasToken = localStorage.getItem('canvasToken');
-    if (savedCanvasToken) setCanvasToken(savedCanvasToken);
+    setCanvasToken(savedCanvasToken);  // Set to null if no token exists
   };
 
   const handleCanvasSetup = (token: string) => {

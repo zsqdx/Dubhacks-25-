@@ -328,7 +328,24 @@ app.post(['/ai/chat','/api/ai/chat'], async (req, res) => {
     if (!agentResponse.ok) {
       const errorText = await agentResponse.text();
       console.error('Bedrock Agent error:', agentResponse.status, errorText);
-      throw new Error(`Agent request failed: ${agentResponse.status}`);
+
+      // Try to parse error details from Lambda response
+      let errorMessage = `Agent request failed: ${agentResponse.status}`;
+      try {
+        const errorData = JSON.parse(errorText);
+        if (errorData.error && errorData.details) {
+          errorMessage = `${errorData.error}: ${errorData.details}`;
+        } else if (errorData.error) {
+          errorMessage = errorData.error;
+        }
+      } catch (parseErr) {
+        // If not JSON, use the raw error text if available
+        if (errorText) {
+          errorMessage = errorText;
+        }
+      }
+
+      throw new Error(errorMessage);
     }
 
     const agentData = await agentResponse.json();

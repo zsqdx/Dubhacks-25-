@@ -4,6 +4,7 @@ import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import { S3Storage, generateId } from './s3Storage.js';
 import { OAuth2Client } from 'google-auth-library';
+import { generateToken, authenticateToken } from './jwtUtils.js';
 
 const app = express();
 const PORT = 3001;
@@ -13,9 +14,6 @@ app.use(express.json());
 
 // Google OAuth2 client
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-
-// In-memory session storage (for hackathon - use Redis/DynamoDB in production)
-const sessions = new Map();
 
 // ===== CANVAS API PROXY =====
 
@@ -82,12 +80,17 @@ app.post('/auth/google', async (req, res) => {
       await S3Storage.saveUserProfile(profile);
     }
 
-    const sessionId = generateId();
-    sessions.set(sessionId, { userId, email, name });
+    // Generate JWT token
+    const token = generateToken({
+      userId,
+      email,
+      name,
+      authProvider: 'google'
+    });
 
     res.json({
       success: true,
-      sessionId,
+      token,
       canvasToken: profile.canvasToken || null,
       user: {
         userId,
@@ -171,12 +174,17 @@ app.post('/auth/signup', async (req, res) => {
 
     await S3Storage.saveUserProfile(profile);
 
-    const sessionId = generateId();
-    sessions.set(sessionId, { userId, email, name });
+    // Generate JWT token
+    const token = generateToken({
+      userId,
+      email,
+      name,
+      authProvider: 'credentials'
+    });
 
     res.json({
       success: true,
-      sessionId,
+      token,
       canvasToken: null,
       user: {
         userId,
@@ -246,16 +254,17 @@ app.post('/auth/login', async (req, res) => {
     foundProfile.lastLogin = new Date().toISOString();
     await S3Storage.saveUserProfile(foundProfile);
 
-    const sessionId = generateId();
-    sessions.set(sessionId, {
+    // Generate JWT token
+    const token = generateToken({
       userId: foundUserId,
       email: foundProfile.email,
       name: foundProfile.name,
+      authProvider: 'credentials'
     });
 
     res.json({
       success: true,
-      sessionId,
+      token,
       canvasToken: foundProfile.canvasToken || null,
       user: {
         userId: foundUserId,
@@ -272,13 +281,9 @@ app.post('/auth/login', async (req, res) => {
 
 // ===== CANVAS TOKEN SETUP =====
 
-app.post('/auth/setup-canvas', async (req, res) => {
-  const { sessionId, canvasToken } = req.body;
-
-  const session = sessions.get(sessionId);
-  if (!session) {
-    return res.status(401).json({ error: 'Invalid session' });
-  }
+app.post('/auth/setup-canvas', authenticateToken, async (req, res) => {
+  const { canvasToken } = req.body;
+  const { userId } = req.user;
 
   try {
     const canvasResponse = await fetch('https://canvas.instructure.com/api/v1/users/self', {
@@ -293,7 +298,7 @@ app.post('/auth/setup-canvas', async (req, res) => {
 
     const canvasUser = await canvasResponse.json();
 
-    await S3Storage.updateCanvasToken(session.userId, canvasToken, canvasUser.id);
+    await S3Storage.updateCanvasToken(userId, canvasToken, canvasUser.id);
 
     res.json({
       success: true,
@@ -310,20 +315,19 @@ app.post('/auth/setup-canvas', async (req, res) => {
 
 // ===== SESSION MANAGEMENT =====
 
-app.get('/auth/session', (req, res) => {
-  const sessionId = req.headers.authorization?.replace('Bearer ', '');
+app.get('/auth/session', authenticateToken, (req, res) => {
+  // JWT middleware already validated the token and added user to req.user
+  const { userId, email, name, authProvider } = req.user;
 
-  const session = sessions.get(sessionId);
-  if (!session) {
-    return res.status(401).json({ error: 'Invalid session' });
-  }
-
-  res.json({ success: true, user: session });
+  res.json({
+    success: true,
+    user: { userId, email, name, authProvider }
+  });
 });
 
 app.post('/auth/logout', (req, res) => {
-  const sessionId = req.headers.authorization?.replace('Bearer ', '');
-  sessions.delete(sessionId);
+  // For JWT, logout is handled client-side by removing the token
+  // No server-side action needed since tokens are stateless
   res.json({ success: true });
 });
 

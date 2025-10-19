@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 
 interface AuthProps {
-  onAuthSuccess: (sessionId: string, user: any) => void;
+  onAuthSuccess: (token: string, user: any) => void;
 }
 
 export default function Auth({ onAuthSuccess }: AuthProps) {
@@ -60,7 +60,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
         if (data.canvasToken) {
           localStorage.setItem('canvasToken', data.canvasToken);
         }
-        onAuthSuccess(data.sessionId, data.user);
+        onAuthSuccess(data.token, data.user);
       } else {
         setError(data.error || 'Google login failed');
       }
@@ -107,7 +107,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
         if (data.canvasToken) {
           localStorage.setItem('canvasToken', data.canvasToken);
         }
-        onAuthSuccess(data.sessionId, data.user);
+        onAuthSuccess(data.token, data.user);
       } else {
         setError(data.error || 'Authentication failed');
       }

@@ -5,12 +5,12 @@ import CanvasLogin from '../CanvasLogin';
 interface DashboardProps {
   user: any;
   canvasToken: string | null;
-  sessionId: string;
+  token: string;
   onLogout: () => void;
   onReconnectCanvas: () => void;
 }
 
-export default function Dashboard({ user, canvasToken, sessionId, onLogout, onReconnectCanvas }: DashboardProps) {
+export default function Dashboard({ user, canvasToken, token, onLogout, onReconnectCanvas }: DashboardProps) {
   return (
     <div>
       <nav style={{
@@ -70,7 +70,7 @@ export default function Dashboard({ user, canvasToken, sessionId, onLogout, onRe
       </nav>
 
       {canvasToken !== 'skipped' ? (
-        <CanvasLogin initialToken={canvasToken} userId={user.userId} sessionId={sessionId} />
+        <CanvasLogin initialToken={canvasToken || undefined} userId={user.userId} />
       ) : (
         <div style={{ padding: '40px', textAlign: 'center' }}>
           <h2>Canvas Not Connected</h2>

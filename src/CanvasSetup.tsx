@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 
 interface CanvasSetupProps {
-  sessionId: string;
+  token: string;
   onSetupComplete: (canvasToken: string) => void;
 }
 
-export default function CanvasSetup({ sessionId, onSetupComplete }: CanvasSetupProps) {
+export default function CanvasSetup({ token, onSetupComplete }: CanvasSetupProps) {
   const [canvasToken, setCanvasToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,8 +24,11 @@ export default function CanvasSetup({ sessionId, onSetupComplete }: CanvasSetupP
     try {
       const response = await fetch('http://localhost:3001/auth/setup-canvas', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, canvasToken }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ canvasToken }),
       });
 
       const data = await response.json();

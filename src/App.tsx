@@ -6,44 +6,44 @@ import Dashboard from './Dashboard';
 import ChatPageWrapper from './ChatPageWrapper';
 
 export default function App() {
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [canvasToken, setCanvasToken] = useState<string | null>(null);
 
-  // Check for existing session on mount
+  // Check for existing JWT token on mount
   useEffect(() => {
-    const savedSessionId = localStorage.getItem('sessionId');
-    if (savedSessionId) {
-      // Verify session is still valid
+    const savedToken = localStorage.getItem('authToken');
+    if (savedToken) {
+      // Verify token is still valid
       fetch('http://localhost:3001/auth/session', {
         headers: {
-          'Authorization': `Bearer ${savedSessionId}`,
+          'Authorization': `Bearer ${savedToken}`,
         },
       })
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            setSessionId(savedSessionId);
+            setToken(savedToken);
             setUser(data.user);
-            // Load canvas token from localStorage for now
+            // Load canvas token from localStorage
             const savedCanvasToken = localStorage.getItem('canvasToken');
             if (savedCanvasToken) {
               setCanvasToken(savedCanvasToken);
             }
           } else {
-            localStorage.removeItem('sessionId');
+            localStorage.removeItem('authToken');
           }
         })
         .catch(() => {
-          localStorage.removeItem('sessionId');
+          localStorage.removeItem('authToken');
         });
     }
   }, []);
 
-  const handleAuthSuccess = (newSessionId: string, newUser: any) => {
-    setSessionId(newSessionId);
+  const handleAuthSuccess = (newToken: string, newUser: any) => {
+    setToken(newToken);
     setUser(newUser);
-    localStorage.setItem('sessionId', newSessionId);
+    localStorage.setItem('authToken', newToken);
 
     // Check if user already has Canvas token stored in localStorage
     const savedCanvasToken = localStorage.getItem('canvasToken');
@@ -63,30 +63,30 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    if (sessionId) {
+    if (token) {
       fetch('http://localhost:3001/auth/logout', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${sessionId}`,
+          'Authorization': `Bearer ${token}`,
         },
       }).catch(() => {});
     }
 
-    setSessionId(null);
+    setToken(null);
     setUser(null);
     setCanvasToken(null);
-    localStorage.removeItem('sessionId');
+    localStorage.removeItem('authToken');
     localStorage.removeItem('canvasToken');
   };
 
   // Not logged in - show auth
-  if (!sessionId || !user) {
+  if (!token || !user) {
     return <Auth onAuthSuccess={handleAuthSuccess} />;
   }
 
   // Logged in but no Canvas token - show Canvas setup
   if (!canvasToken) {
-    return <CanvasSetup sessionId={sessionId} onSetupComplete={handleCanvasSetup} />;
+    return <CanvasSetup token={token} onSetupComplete={handleCanvasSetup} />;
   }
 
   // Fully set up - show main app with routing
@@ -99,7 +99,7 @@ export default function App() {
             <Dashboard
               user={user}
               canvasToken={canvasToken}
-              sessionId={sessionId}
+              token={token}
               onLogout={handleLogout}
               onReconnectCanvas={() => setCanvasToken(null)}
             />

@@ -244,6 +244,8 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
               fontSize: '15px',
               cursor: loading ? 'not-allowed' : 'pointer',
               opacity: loading ? 0.8 : 1,
+              display: 'block',
+              marginLeft: '8px',
             }}
           >
             {loading ? 'Signing in...' : isSignup ? 'Create Account' : 'Sign In'}

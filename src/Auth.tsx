@@ -171,7 +171,7 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
         <form onSubmit={handleCredentialsAuth}>
           {isSignup && (
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '14px', color: c.text }}>Full Name</label>
+              <label style={{ fontSize: '14px', color: c.text }}>Name</label>
               <input
                 type="text"
                 value={name}

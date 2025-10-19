@@ -116,14 +116,24 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
         </div>
 
         {/* Google Sign In */}
-        <div style={{ marginBottom: '24px', textAlign: 'center' }}>
-          <GoogleLogin
-            onSuccess={handleGoogleSuccess}
-            onError={() => setError('Google sign in failed')}
-            theme={theme === 'dark' ? 'filled_black' : 'outline'}
-            width="340"
-          />
-        </div>
+        <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginBottom: '24px',
+              width: '100%',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => setError('Google sign in failed')}
+                theme={theme === 'dark' ? 'filled_black' : 'outline'}
+                width="320"
+              />
+            </div>
+          </div>
 
         {/* Divider */}
         <div style={{

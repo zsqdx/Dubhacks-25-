@@ -3,42 +3,12 @@ import { useTheme } from './App';
 import { Lightbulb, BookOpen, MessageSquare, Send, Plus } from 'lucide-react';
 import Navbar from './Navbar';
 
-async function fetchAI(base: string, body: any) {
-  const paths = ['/ai/chat', '/api/ai/chat'];
-  let lastErr: any = null;
-  for (const path of paths) {
-    try {
-      const resp = await fetch(`${base}${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const contentType = resp.headers.get('content-type') || '';
-      const raw = await resp.text();
-      if (!contentType.includes('application/json')) {
-        lastErr = new Error(`Non-JSON from ${path} (${resp.status}). First bytes: ${raw.slice(0, 200)}`);
-        continue;
-      }
-      const data = JSON.parse(raw);
-      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
-      return data;
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr || new Error('All endpoints failed');
-}
 interface Message {
   id: string;
   text: string;
   isAI: boolean;
   timestamp: Date;
   type?: 'text' | 'code' | 'insight';
-  metadata?: {
-    course?: string;
-    topic?: string;
-    confidence?: number;
-  };
 }
 
 interface QuickPrompt {
@@ -56,14 +26,14 @@ const ChatPage: React.FC = () => {
       text: "Hi! I'm your AI tutor powered by AWS Bedrock. I can help you understand concepts, work through problems, and create personalized study plans based on your Canvas courses. What would you like to work on today?",
       isAI: true,
       timestamp: new Date(),
-      type: 'text'
-    }
+      type: 'text',
+    },
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [showMenu, setShowMenu] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const c = {
     dark: {
@@ -75,6 +45,7 @@ const ChatPage: React.FC = () => {
       cardBg: '#1a1a1a',
       border: '#2d2d2d',
       aiBg: '#1c1c1c',
+      shadow: '0 4px 25px rgba(0,0,0,0.5)',
     },
     light: {
       bg: '#f9fafb',
@@ -85,7 +56,8 @@ const ChatPage: React.FC = () => {
       cardBg: '#ffffff',
       border: '#e5e7eb',
       aiBg: '#f3f4f6',
-    }
+      shadow: '0 8px 25px rgba(0,0,0,0.1)',
+    },
   }[theme];
 
   const quickPrompts: QuickPrompt[] = [
@@ -98,6 +70,7 @@ const ChatPage: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
+  // --- Keep existing AI send logic ---
   const handleSend = async () => {
     if (!input.trim() || isTyping) return;
 
@@ -106,125 +79,125 @@ const ChatPage: React.FC = () => {
       text: input,
       isAI: false,
       timestamp: new Date(),
-      type: 'text'
+      type: 'text',
     };
     setMessages([...messages, userMessage]);
     setInput('');
     setIsTyping(true);
 
-try {
-  const sessionId = localStorage.getItem('sessionId') || undefined;
+    try {
+      const sessionId = localStorage.getItem('sessionId') || undefined;
+      const historyForServer = messages.slice(-10).map((m) => ({
+        isAI: m.isAI,
+        text: m.text,
+      }));
 
-  // Keep a compact history (last 10 turns)
-  const historyForServer = messages.slice(-10).map(m => ({
-    isAI: m.isAI,
-    text: m.text,
-  }));
+      const base = (import.meta as any)?.env?.VITE_API_BASE || 'http://localhost:3001';
+      const resp = await fetch(`${base}/ai/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          history: historyForServer,
+          input,
+          system: 'You are a helpful CS tutor. Be clear, concise, and friendly.',
+        }),
+      });
 
-  const base = (import.meta as any)?.env?.VITE_API_BASE || 'http://localhost:3001';
-  const resp = await fetch(`${base}/ai/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      sessionId,
-      history: historyForServer,
-      input,
-      system: "You are a helpful CS tutor. Be clear, concise, and friendly.",
-    }),
-  });
+      const contentType = resp.headers.get('content-type') || '';
+      const raw = await resp.text();
+      if (!contentType.includes('application/json')) {
+        throw new Error(`Server returned non-JSON (${resp.status}). First bytes: ${raw.slice(0, 200)}`);
+      }
 
-  const contentType = resp.headers.get('content-type') || '';
-  const raw = await resp.text();
+      const data = JSON.parse(raw);
+      if (!resp.ok) throw new Error(data?.error || 'AI request failed');
 
-  if (!contentType.includes('application/json')) {
-    throw new Error(`Server returned non-JSON (${resp.status}). First bytes: ${raw.slice(0, 200)}`);
-  }
-
-  const data = JSON.parse(raw);
-  if (!resp.ok) {
-    throw new Error(data?.error || 'AI request failed');
-  }
-
-  const aiResponse: Message = {
-    id: (Date.now() + 1).toString(),
-    text: data.text || 'No text returned.',
-    isAI: true,
-    timestamp: new Date(),
-    type: 'text',
+      const aiResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: data.text || 'No text returned.',
+        isAI: true,
+        timestamp: new Date(),
+        type: 'text',
+      };
+      setMessages((prev) => [...prev, aiResponse]);
+    } catch (e: any) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 2).toString(),
+          text: `Error: ${e.message}`,
+          isAI: true,
+          timestamp: new Date(),
+          type: 'text',
+        },
+      ]);
+    } finally {
+      setIsTyping(false);
+    }
   };
-
-  setMessages(prev => [...prev, aiResponse]);
-} catch (e: any) {
-  setMessages(prev => [...prev, {
-    id: (Date.now() + 2).toString(),
-    text: `Error: ${e.message}`,
-    isAI: true,
-    timestamp: new Date(),
-    type: 'text',
-  }]);
-} finally {
-  setIsTyping(false);
-}
-  };
+  // -------------------------------
 
   return (
-    <div style={{ background: c.bg, minHeight: '100vh' }}>
+    <div style={{ background: c.bg, color: c.text, height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
-
-      <div style={{
-        display: 'flex',
-        height: 'calc(100vh - 64px)',
-        overflow: 'hidden',
-      }}>
-        {/* Sidebar */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Sidebar pinned */}
         {showSidebar && (
-          <aside style={{
-            width: '260px',
-            background: c.sidebarBg,
-            borderRight: `1px solid ${c.border}`,
-            padding: '20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '20px'
-          }}>
-            <h3 style={{
-              fontSize: '13px',
-              color: c.textSecondary,
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px'
-            }}>Quick Prompts</h3>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {quickPrompts.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => setInput(p.prompt)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '10px',
-                    background: c.cardBg,
-                    border: `1px solid ${c.border}`,
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    color: c.text,
-                    fontSize: '13px',
-                    transition: 'all 0.2s'
-                  }}
-                  onMouseOver={e => (e.currentTarget.style.borderColor = c.accent)}
-                  onMouseOut={e => (e.currentTarget.style.borderColor = c.border)}
-                >
-                  {p.icon}
-                  {p.label}
-                </button>
-              ))}
+          <aside
+            style={{
+              width: '260px',
+              background: c.sidebarBg,
+              borderRight: `1px solid ${c.border}`,
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div>
+              <h3
+                style={{
+                  fontSize: '13px',
+                  color: c.textSecondary,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  marginBottom: '12px',
+                }}
+              >
+                Quick Prompts
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {quickPrompts.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => setInput(p.prompt)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '10px',
+                      background: c.cardBg,
+                      border: `1px solid ${c.border}`,
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      color: c.text,
+                      fontSize: '13px',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseOver={(e) => (e.currentTarget.style.borderColor = c.accent)}
+                    onMouseOut={(e) => (e.currentTarget.style.borderColor = c.border)}
+                  >
+                    {p.icon}
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
-
             <button
               style={{
-                marginTop: 'auto',
+                marginTop: '20px',
                 padding: '10px',
                 background: c.accent,
                 border: 'none',
@@ -236,17 +209,19 @@ try {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '6px'
+                gap: '6px',
               }}
-              onClick={() => setMessages([
-                {
-                  id: '1',
-                  text: 'Starting a new session. What topic would you like to review today?',
-                  isAI: true,
-                  timestamp: new Date(),
-                  type: 'text'
-                }
-              ])}
+              onClick={() =>
+                setMessages([
+                  {
+                    id: '1',
+                    text: 'Starting a new session. What topic would you like to review today?',
+                    isAI: true,
+                    timestamp: new Date(),
+                    type: 'text',
+                  },
+                ])
+              }
             >
               <Plus size={15} /> New Chat
             </button>
@@ -254,26 +229,57 @@ try {
         )}
 
         {/* Chat Area */}
-        <main style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          position: 'relative'
-        }}>
-          {/* Chat Messages */}
-          <div style={{
+        <main
+          style={{
             flex: 1,
-            overflowY: 'auto',
-            padding: '30px 20px'
-          }}>
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            position: 'relative',
+          }}
+        >
+          {/* Greeting when empty */}
+          {messages.length <= 1 && (
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'column',
+                textAlign: 'center',
+              }}
+            >
+              <h1
+                style={{
+                  fontSize: '44px',
+                  fontWeight: 600,
+                  color: c.text,
+                  marginBottom: '24px',
+                }}
+              >
+                How are you today, Mazin?
+              </h1>
+            </div>
+          )}
+
+          {/* Chat Messages */}
+          <div
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '30px 20px',
+              scrollBehavior: 'smooth',
+            }}
+          >
             <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-              {messages.map(msg => (
+              {messages.map((msg) => (
                 <div
                   key={msg.id}
                   style={{
                     display: 'flex',
                     justifyContent: msg.isAI ? 'flex-start' : 'flex-end',
-                    marginBottom: '18px'
+                    marginBottom: '18px',
                   }}
                 >
                   <div
@@ -284,7 +290,7 @@ try {
                       padding: '12px 16px',
                       maxWidth: '70%',
                       lineHeight: 1.5,
-                      boxShadow: msg.isAI ? 'none' : '0 2px 10px rgba(139,92,246,0.25)'
+                      boxShadow: msg.isAI ? 'none' : '0 2px 10px rgba(139,92,246,0.25)',
                     }}
                   >
                     {msg.text}
@@ -292,13 +298,15 @@ try {
                 </div>
               ))}
               {isTyping && (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  color: c.textSecondary,
-                  fontSize: '13px'
-                }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    color: c.textSecondary,
+                    fontSize: '13px',
+                  }}
+                >
                   <span>AI Tutor is typing...</span>
                 </div>
               )}
@@ -306,23 +314,85 @@ try {
             </div>
           </div>
 
-          {/* Input */}
-          <div style={{
-            borderTop: `1px solid ${c.border}`,
-            background: c.sidebarBg,
-            padding: '16px 20px'
-          }}>
-            <div style={{
+          {/* Floating Input Bar */}
+          <div
+            style={{
+              position: 'sticky',
+              bottom: 0,
+              background: 'transparent',
+              padding: '20px',
               display: 'flex',
-              maxWidth: '800px',
-              margin: '0 auto',
-              background: c.cardBg,
-              border: `1px solid ${c.border}`,
-              borderRadius: '10px',
-              padding: '4px'
-            }}>
+              justifyContent: 'center',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                width: '100%',
+                maxWidth: '720px',
+                background: c.cardBg,
+                border: `1px solid ${c.border}`,
+                borderRadius: '18px',
+                boxShadow: c.shadow,
+                padding: '8px 12px',
+              }}
+            >
+              {/* Plus dropdown */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowMenu(!showMenu)}
+                  style={{
+                    background: 'none',
+                    border: `1px solid ${c.border}`,
+                    borderRadius: '10px',
+                    padding: '8px 10px',
+                    cursor: 'pointer',
+                    color: c.textSecondary,
+                  }}
+                >
+                  <Plus size={18} />
+                </button>
+
+                {showMenu && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '110%',
+                      left: 0,
+                      background: c.cardBg,
+                      border: `1px solid ${c.border}`,
+                      borderRadius: '10px',
+                      boxShadow: c.shadow,
+                      padding: '8px 0',
+                      width: '200px',
+                      zIndex: 10,
+                    }}
+                  >
+                    {['Upload a file', 'Add from Google Drive'].map((option) => (
+                      <button
+                        key={option}
+                        onClick={() => alert(option)}
+                        style={{
+                          width: '100%',
+                          background: 'none',
+                          border: 'none',
+                          color: c.text,
+                          textAlign: 'left',
+                          padding: '10px 14px',
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <textarea
-                ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -331,7 +401,7 @@ try {
                     handleSend();
                   }
                 }}
-                placeholder="Ask a question or request a practice problem..."
+                placeholder="What can I help you with today?"
                 rows={1}
                 style={{
                   flex: 1,
@@ -339,30 +409,25 @@ try {
                   border: 'none',
                   outline: 'none',
                   color: c.text,
-                  padding: '10px 12px',
-                  fontSize: '14px',
+                  fontSize: '16px',
                   resize: 'none',
+                  padding: '8px 10px',
                 }}
               />
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || isTyping}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  padding: '10px 16px',
-                  background: input.trim() ? c.accent : c.cardBg,
-                  color: input.trim() ? '#fff' : c.textSecondary,
+                  background: c.accent,
                   border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  cursor: input.trim() ? 'pointer' : 'not-allowed'
+                  borderRadius: '12px',
+                  padding: '10px 14px',
+                  color: '#fff',
+                  cursor: input.trim() ? 'pointer' : 'not-allowed',
+                  opacity: input.trim() ? 1 : 0.6,
                 }}
               >
-                <Send size={16} />
-                Send
+                <Send size={18} />
               </button>
             </div>
           </div>

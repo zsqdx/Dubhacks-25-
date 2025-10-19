@@ -6,7 +6,7 @@ interface Message {
   isAI: boolean;
 }
 
-const App: React.FC = () => {
+const ChatPage: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([
     { id: '1', text: "Hi! I'm your AI Teaching Assistant. Ask me anything!", isAI: true }
   ]);
@@ -38,16 +38,16 @@ const App: React.FC = () => {
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
       <h1>AI Teaching Assistant</h1>
-      
-      <div style={{ 
-        border: '1px solid #ccc', 
-        height: '400px', 
+
+      <div style={{
+        border: '1px solid #ccc',
+        height: '400px',
         overflowY: 'scroll',
         padding: '10px',
         marginBottom: '10px'
       }}>
         {messages.map(msg => (
-          <div 
+          <div
             key={msg.id}
             style={{
               textAlign: msg.isAI ? 'left' : 'right',
@@ -75,7 +75,7 @@ const App: React.FC = () => {
           placeholder="Ask a question..."
           style={{ flex: 1, padding: '10px', fontSize: '16px' }}
         />
-        <button 
+        <button
           onClick={handleSend}
           style={{ padding: '10px 20px', fontSize: '16px' }}
         >
@@ -86,4 +86,4 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+export default ChatPage;

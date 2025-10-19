@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Auth from './Auth';
 import CanvasSetup from './CanvasSetup';
-import CanvasLogin from '../CanvasLogin';
+import Dashboard from './Dashboard';
+import ChatPageWrapper from './ChatPageWrapper';
 
 export default function App() {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -87,63 +89,32 @@ export default function App() {
     return <CanvasSetup sessionId={sessionId} onSetupComplete={handleCanvasSetup} />;
   }
 
-  // Fully set up - show main app
+  // Fully set up - show main app with routing
   return (
-    <div>
-      <div style={{
-        padding: '15px 20px',
-        backgroundColor: '#f8f9fa',
-        borderBottom: '1px solid #ddd',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
-        <div>
-          <strong>Welcome, {user.name}!</strong>
-          <span style={{ color: '#666', marginLeft: '10px', fontSize: '14px' }}>
-            ({user.email})
-          </span>
-        </div>
-        <button
-          onClick={handleLogout}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '14px',
-          }}
-        >
-          Logout
-        </button>
-      </div>
-
-      {canvasToken !== 'skipped' ? (
-        <CanvasLogin initialToken={canvasToken} userId={user.userId} sessionId={sessionId} />
-      ) : (
-        <div style={{ padding: '40px', textAlign: 'center' }}>
-          <h2>Canvas Not Connected</h2>
-          <p style={{ color: '#666', marginBottom: '20px' }}>
-            To use AI study features, please connect your Canvas account
-          </p>
-          <button
-            onClick={() => setCanvasToken(null)}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '16px',
-            }}
-          >
-            Connect Canvas Now
-          </button>
-        </div>
-      )}
-    </div>
+    <Router>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <Dashboard
+              user={user}
+              canvasToken={canvasToken}
+              sessionId={sessionId}
+              onLogout={handleLogout}
+              onReconnectCanvas={() => setCanvasToken(null)}
+            />
+          }
+        />
+        <Route
+          path="/chat"
+          element={
+            <ChatPageWrapper
+              user={user}
+              onLogout={handleLogout}
+            />
+          }
+        />
+      </Routes>
+    </Router>
   );
 }

@@ -1,26 +1,74 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useTheme } from './App';
+import { Lightbulb, BookOpen, MessageSquare, Send, Plus } from 'lucide-react';
+import Navbar from './Navbar';
 
 interface Message {
   id: string;
   text: string;
   isAI: boolean;
   timestamp: Date;
+  type?: 'text' | 'code' | 'insight';
+  metadata?: {
+    course?: string;
+    topic?: string;
+    confidence?: number;
+  };
+}
+
+interface QuickPrompt {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  prompt: string;
 }
 
 const ChatPage: React.FC = () => {
+  const { theme } = useTheme();
   const [messages, setMessages] = useState<Message[]>([
-    { 
-      id: '1', 
-      text: "Hi! I'm your AI Teaching Assistant. I can help you understand course material, generate practice problems, and identify areas where you might need extra support. What would you like to work on today?", 
+    {
+      id: '1',
+      text: "Hi! I'm your AI tutor powered by AWS Bedrock. I can help you understand concepts, work through problems, and create personalized study plans based on your Canvas courses. What would you like to work on today?",
       isAI: true,
-      timestamp: new Date()
+      timestamp: new Date(),
+      type: 'text'
     }
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-scroll to bottom when new messages arrive
+  const c = {
+    dark: {
+      bg: '#0a0a0a',
+      sidebarBg: '#141414',
+      text: '#f3f4f6',
+      textSecondary: '#9ca3af',
+      accent: '#8b5cf6',
+      cardBg: '#1a1a1a',
+      border: '#2d2d2d',
+      aiBg: '#1c1c1c',
+    },
+    light: {
+      bg: '#f9fafb',
+      sidebarBg: '#ffffff',
+      text: '#111827',
+      textSecondary: '#6b7280',
+      accent: '#6d28d9',
+      cardBg: '#ffffff',
+      border: '#e5e7eb',
+      aiBg: '#f3f4f6',
+    }
+  }[theme];
+
+  const quickPrompts: QuickPrompt[] = [
+    { id: '1', label: 'Explain concept', icon: <Lightbulb size={15} />, prompt: 'Can you explain ' },
+    { id: '2', label: 'Practice problem', icon: <BookOpen size={15} />, prompt: 'Give me a practice problem about ' },
+    { id: '3', label: 'Study plan', icon: <MessageSquare size={15} />, prompt: 'Create a study plan for ' },
+  ];
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
@@ -32,294 +80,227 @@ const ChatPage: React.FC = () => {
       id: Date.now().toString(),
       text: input,
       isAI: false,
-      timestamp: new Date()
+      timestamp: new Date(),
+      type: 'text'
     };
     setMessages([...messages, userMessage]);
     setInput('');
     setIsTyping(true);
 
-    // Mock AI response with typing delay
     setTimeout(() => {
-      const aiMessage: Message = {
+      const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: `Great question about "${input}"! I'm analyzing your Canvas course data and learning patterns to provide you with a personalized response. (This is a demo - your backend will provide real AI responses!)`,
+        text: `Let's review "${input}". Based on your Canvas progress, this ties into CS 201 – Data Structures. Here's a simplified explanation...`,
         isAI: true,
-        timestamp: new Date()
+        timestamp: new Date(),
+        type: 'text'
       };
-      setMessages(prev => [...prev, aiMessage]);
+      setMessages(prev => [...prev, aiResponse]);
       setIsTyping(false);
-    }, 1500);
+    }, 1400);
   };
 
   return (
-    <div style={{
-      height: 'calc(100vh - 60px)',
-      display: 'flex',
-      flexDirection: 'column',
-      background: 'linear-gradient(to bottom, #f7f9fc 0%, #ffffff 100%)',
-    }}>
-      {/* Chat Header */}
-      <div style={{
-        padding: '20px 30px',
-        background: 'white',
-        borderBottom: '1px solid #e5e7eb',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-      }}>
-        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-          <h1 style={{ margin: 0, fontSize: '24px', color: '#111827', fontWeight: '600' }}>
-            AI Teaching Assistant
-          </h1>
-          <p style={{ margin: '5px 0 0 0', color: '#6b7280', fontSize: '14px' }}>
-            Powered by Canvas course data • Always learning with you
-          </p>
-        </div>
-      </div>
+    <div style={{ background: c.bg, minHeight: '100vh' }}>
+      <Navbar />
 
-      {/* Messages Container */}
       <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        padding: '30px 20px',
+        display: 'flex',
+        height: 'calc(100vh - 64px)',
+        overflow: 'hidden',
       }}>
-        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-          {messages.map(msg => (
-            <div
-              key={msg.id}
-              style={{
-                display: 'flex',
-                justifyContent: msg.isAI ? 'flex-start' : 'flex-end',
-                marginBottom: '24px',
-                animation: 'fadeIn 0.3s ease-in',
-              }}
-            >
-              <div style={{
-                maxWidth: '75%',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '4px',
-              }}>
-                {/* Avatar & Name */}
-                {msg.isAI && (
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '8px',
-                    marginBottom: '4px'
-                  }}>
-                    <div style={{
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '14px',
-                      color: 'white',
-                      fontWeight: '600',
-                    }}>
-                      AI
-                    </div>
-                    <span style={{ fontSize: '13px', fontWeight: '600', color: '#374151' }}>
-                      Teaching Assistant
-                    </span>
-                  </div>
-                )}
-                
-                {/* Message Bubble */}
-                <div style={{
-                  padding: '14px 18px',
-                  borderRadius: msg.isAI ? '8px 18px 18px 18px' : '18px 8px 18px 18px',
-                  background: msg.isAI 
-                    ? 'white'
-                    : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: msg.isAI ? '#1f2937' : 'white',
-                  boxShadow: msg.isAI 
-                    ? '0 2px 8px rgba(0,0,0,0.08)'
-                    : '0 4px 12px rgba(102, 126, 234, 0.3)',
-                  lineHeight: '1.6',
-                  fontSize: '15px',
-                }}>
-                  {msg.text}
-                </div>
-                
-                {/* Timestamp */}
-                <div style={{
-                  fontSize: '11px',
-                  color: '#9ca3af',
-                  marginLeft: msg.isAI ? '36px' : '0',
-                  textAlign: msg.isAI ? 'left' : 'right',
-                }}>
-                  {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
-              </div>
-            </div>
-          ))}
-          
-          {/* Typing Indicator */}
-          {isTyping && (
-            <div style={{
-              display: 'flex',
-              justifyContent: 'flex-start',
-              marginBottom: '24px',
-            }}>
-              <div style={{ maxWidth: '75%' }}>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '8px',
-                  marginBottom: '4px'
-                }}>
-                  <div style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        {/* Sidebar */}
+        {showSidebar && (
+          <aside style={{
+            width: '260px',
+            background: c.sidebarBg,
+            borderRight: `1px solid ${c.border}`,
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px'
+          }}>
+            <h3 style={{
+              fontSize: '13px',
+              color: c.textSecondary,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}>Quick Prompts</h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {quickPrompts.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setInput(p.prompt)}
+                  style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '14px',
-                    color: 'white',
-                    fontWeight: '600',
-                  }}>
-                    AI
-                  </div>
-                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#374151' }}>
-                    Teaching Assistant
-                  </span>
-                </div>
-                <div style={{
-                  padding: '14px 18px',
-                  borderRadius: '8px 18px 18px 18px',
-                  background: 'white',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                  marginLeft: '0',
-                }}>
-                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                    <div style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      background: '#9ca3af',
-                      animation: 'bounce 1.4s infinite ease-in-out',
-                    }} />
-                    <div style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      background: '#9ca3af',
-                      animation: 'bounce 1.4s infinite ease-in-out 0.2s',
-                    }} />
-                    <div style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      background: '#9ca3af',
-                      animation: 'bounce 1.4s infinite ease-in-out 0.4s',
-                    }} />
-                  </div>
-                </div>
-              </div>
+                    gap: '10px',
+                    padding: '10px',
+                    background: c.cardBg,
+                    border: `1px solid ${c.border}`,
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    color: c.text,
+                    fontSize: '13px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseOver={e => (e.currentTarget.style.borderColor = c.accent)}
+                  onMouseOut={e => (e.currentTarget.style.borderColor = c.border)}
+                >
+                  {p.icon}
+                  {p.label}
+                </button>
+              ))}
             </div>
-          )}
-          
-          <div ref={messagesEndRef} />
-        </div>
-      </div>
 
-      {/* Input Area */}
-      <div style={{
-        background: 'white',
-        borderTop: '1px solid #e5e7eb',
-        padding: '20px',
-        boxShadow: '0 -2px 10px rgba(0,0,0,0.05)',
-      }}>
-        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-          <div style={{
-            display: 'flex',
-            gap: '12px',
-            background: '#f9fafb',
-            padding: '8px',
-            borderRadius: '12px',
-            border: '2px solid #e5e7eb',
-            transition: 'border-color 0.2s',
-          }}
-          onFocus={(e) => e.currentTarget.style.borderColor = '#667eea'}
-          onBlur={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
-          >
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Ask about assignments, request practice problems, or get help catching up..."
-              disabled={isTyping}
-              style={{
-                flex: 1,
-                padding: '12px 16px',
-                fontSize: '15px',
-                border: 'none',
-                background: 'transparent',
-                outline: 'none',
-                color: '#111827',
-              }}
-            />
             <button
-              onClick={handleSend}
-              disabled={!input.trim() || isTyping}
               style={{
-                padding: '12px 24px',
-                background: !input.trim() || isTyping 
-                  ? '#e5e7eb' 
-                  : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: !input.trim() || isTyping ? '#9ca3af' : 'white',
+                marginTop: 'auto',
+                padding: '10px',
+                background: c.accent,
                 border: 'none',
                 borderRadius: '8px',
-                fontSize: '15px',
-                fontWeight: '600',
-                cursor: !input.trim() || isTyping ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: !input.trim() || isTyping 
-                  ? 'none' 
-                  : '0 4px 12px rgba(102, 126, 234, 0.3)',
+                color: '#fff',
+                fontWeight: 600,
+                fontSize: '13px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
               }}
-              onMouseOver={(e) => {
-                if (input.trim() && !isTyping) {
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(102, 126, 234, 0.4)';
+              onClick={() => setMessages([
+                {
+                  id: '1',
+                  text: 'Starting a new session. What topic would you like to review today?',
+                  isAI: true,
+                  timestamp: new Date(),
+                  type: 'text'
                 }
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = !input.trim() || isTyping 
-                  ? 'none' 
-                  : '0 4px 12px rgba(102, 126, 234, 0.3)';
-              }}
+              ])}
             >
-              Send →
+              <Plus size={15} /> New Chat
             </button>
-          </div>
-          <p style={{ 
-            fontSize: '12px', 
-            color: '#9ca3af', 
-            margin: '8px 0 0 0',
-            textAlign: 'center'
-          }}>
-            Press Enter to send • Connected to your Canvas courses
-          </p>
-        </div>
-      </div>
+          </aside>
+        )}
 
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes bounce {
-          0%, 60%, 100% { transform: translateY(0); }
-          30% { transform: translateY(-10px); }
-        }
-      `}</style>
+        {/* Chat Area */}
+        <main style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative'
+        }}>
+          {/* Chat Messages */}
+          <div style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '30px 20px'
+          }}>
+            <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+              {messages.map(msg => (
+                <div
+                  key={msg.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: msg.isAI ? 'flex-start' : 'flex-end',
+                    marginBottom: '18px'
+                  }}
+                >
+                  <div
+                    style={{
+                      background: msg.isAI ? c.aiBg : c.accent,
+                      color: msg.isAI ? c.text : 'white',
+                      borderRadius: msg.isAI ? '6px 14px 14px 14px' : '14px 6px 14px 14px',
+                      padding: '12px 16px',
+                      maxWidth: '70%',
+                      lineHeight: 1.5,
+                      boxShadow: msg.isAI ? 'none' : '0 2px 10px rgba(139,92,246,0.25)'
+                    }}
+                  >
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+              {isTyping && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  color: c.textSecondary,
+                  fontSize: '13px'
+                }}>
+                  <span>AI Tutor is typing...</span>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+
+          {/* Input */}
+          <div style={{
+            borderTop: `1px solid ${c.border}`,
+            background: c.sidebarBg,
+            padding: '16px 20px'
+          }}>
+            <div style={{
+              display: 'flex',
+              maxWidth: '800px',
+              margin: '0 auto',
+              background: c.cardBg,
+              border: `1px solid ${c.border}`,
+              borderRadius: '10px',
+              padding: '4px'
+            }}>
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder="Ask a question or request a practice problem..."
+                rows={1}
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  color: c.text,
+                  padding: '10px 12px',
+                  fontSize: '14px',
+                  resize: 'none',
+                }}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!input.trim() || isTyping}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  padding: '10px 16px',
+                  background: input.trim() ? c.accent : c.cardBg,
+                  color: input.trim() ? '#fff' : c.textSecondary,
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  cursor: input.trim() ? 'pointer' : 'not-allowed'
+                }}
+              >
+                <Send size={16} />
+                Send
+              </button>
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
   );
 };

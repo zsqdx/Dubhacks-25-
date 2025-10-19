@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
+import { useTheme } from './App';
 
 interface AuthProps {
   onAuthSuccess: (sessionId: string, user: any) => void;
 }
 
 export default function Auth({ onAuthSuccess }: AuthProps) {
+  const { theme, toggleTheme } = useTheme();
   const [isSignup, setIsSignup] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,27 +18,17 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
   const handleGoogleSuccess = async (credentialResponse: any) => {
     setLoading(true);
     setError(null);
-
     try {
       const response = await fetch('http://localhost:3001/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ credential: credentialResponse.credential }),
       });
-
       const data = await response.json();
-
-      if (data.success) {
-        // Store canvas token if it exists
-        if (data.canvasToken) {
-          localStorage.setItem('canvasToken', data.canvasToken);
-        }
-        onAuthSuccess(data.sessionId, data.user);
-      } else {
-        setError(data.error || 'Google login failed');
-      }
-    } catch (err) {
-      setError('Failed to connect to auth server');
+      if (data.success) onAuthSuccess(data.sessionId, data.user);
+      else setError(data.error || 'Google login failed');
+    } catch {
+      setError('Connection error');
     } finally {
       setLoading(false);
     }
@@ -56,189 +48,236 @@ export default function Auth({ onAuthSuccess }: AuthProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-
       const data = await response.json();
-
-      if (data.success) {
-        // Store canvas token if it exists
-        if (data.canvasToken) {
-          localStorage.setItem('canvasToken', data.canvasToken);
-        }
-        onAuthSuccess(data.sessionId, data.user);
-      } else {
-        setError(data.error || 'Authentication failed');
-      }
-    } catch (err) {
-      setError('Failed to connect to auth server');
+      if (data.success) onAuthSuccess(data.sessionId, data.user);
+      else setError(data.error || 'Authentication failed');
+    } catch {
+      setError('Connection error');
     } finally {
       setLoading(false);
     }
   };
 
+  const colors = {
+    light: {
+      bg: '#f9fafb',
+      cardBg: '#ffffff',
+      border: '#e5e7eb',
+      text: '#111827',
+      textSecondary: '#6b7280',
+      accent: '#6d28d9',
+    },
+    dark: {
+      bg: '#0a0a0a',
+      cardBg: '#1a1a1a',
+      border: '#2d2d2d',
+      text: '#f3f4f6',
+      textSecondary: '#9ca3af',
+      accent: '#8b5cf6',
+    },
+  };
+  const c = colors[theme];
+
   return (
     <div style={{
-      maxWidth: '450px',
-      margin: '50px auto',
-      padding: '40px',
-      border: '1px solid #ddd',
-      borderRadius: '12px',
-      backgroundColor: '#fff',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+      minHeight: '100vh',
+      background: c.bg,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '24px',
     }}>
-      <h1 style={{ textAlign: 'center', marginBottom: '10px' }}>CourseCompanion</h1>
-      <p style={{ textAlign: 'center', color: '#666', marginBottom: '30px' }}>
-        AI-powered study assistant for Canvas
-      </p>
-
-      {/* Google Sign In */}
-      <div style={{ marginBottom: '30px' }}>
-        <GoogleLogin
-          onSuccess={handleGoogleSuccess}
-          onError={() => setError('Google sign in failed')}
-          useOneTap
-        />
-      </div>
-
       <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        margin: '30px 0',
-        color: '#999',
+        width: '100%',
+        maxWidth: '420px',
+        background: c.cardBg,
+        border: `1px solid ${c.border}`,
+        borderRadius: '12px',
+        boxShadow: theme === 'light' ? '0 6px 24px rgba(0,0,0,0.06)' : '0 6px 18px rgba(0,0,0,0.4)',
+        padding: '40px',
       }}>
-        <div style={{ flex: 1, height: '1px', backgroundColor: '#ddd' }} />
-        <span style={{ padding: '0 15px', fontSize: '14px' }}>OR</span>
-        <div style={{ flex: 1, height: '1px', backgroundColor: '#ddd' }} />
-      </div>
+        {/* Branding */}
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <h1 style={{
+            fontSize: '26px',
+            fontWeight: 700,
+            marginBottom: '6px',
+            color: c.text,
+          }}>
+            CourseCompanion
+          </h1>
+          <p style={{
+            fontSize: '14px',
+            color: c.textSecondary,
+            margin: 0,
+          }}>
+            Sign in to continue
+          </p>
+        </div>
 
-      {/* Email/Password Form */}
-      <form onSubmit={handleCredentialsAuth}>
-        {isSignup && (
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '500' }}>
-              Name
-            </label>
+        {/* Google Sign In */}
+        <div style={{ marginBottom: '24px', textAlign: 'center' }}>
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => setError('Google sign in failed')}
+            theme={theme === 'dark' ? 'filled_black' : 'outline'}
+            width="340"
+          />
+        </div>
+
+        {/* Divider */}
+        <div style={{
+          textAlign: 'center',
+          color: c.textSecondary,
+          fontSize: '13px',
+          margin: '20px 0',
+          position: 'relative',
+        }}>
+          <span style={{
+            background: c.cardBg,
+            padding: '0 8px',
+            position: 'relative',
+            zIndex: 2,
+          }}>or continue with email</span>
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: 0,
+            right: 0,
+            height: '1px',
+            background: c.border,
+            zIndex: 1,
+          }} />
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleCredentialsAuth}>
+          {isSignup && (
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ fontSize: '14px', color: c.text }}>Full Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: `1px solid ${c.border}`,
+                  marginTop: '6px',
+                  fontSize: '14px',
+                  color: c.text,
+                  background: theme === 'dark' ? '#111' : '#fff',
+                }}
+              />
+            </div>
+          )}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '14px', color: c.text }}>Email</label>
             <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
               style={{
                 width: '100%',
                 padding: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
+                borderRadius: '8px',
+                border: `1px solid ${c.border}`,
+                marginTop: '6px',
                 fontSize: '14px',
+                color: c.text,
+                background: theme === 'dark' ? '#111' : '#fff',
               }}
             />
           </div>
+          <div style={{ marginBottom: '24px' }}>
+            <label style={{ fontSize: '14px', color: c.text }}>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+              style={{
+                width: '100%',
+                padding: '10px',
+                borderRadius: '8px',
+                border: `1px solid ${c.border}`,
+                marginTop: '6px',
+                fontSize: '14px',
+                color: c.text,
+                background: theme === 'dark' ? '#111' : '#fff',
+              }}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: c.accent,
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              fontWeight: 600,
+              fontSize: '15px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.8 : 1,
+            }}
+          >
+            {loading ? 'Signing in...' : isSignup ? 'Create Account' : 'Sign In'}
+          </button>
+        </form>
+
+        {/* Error */}
+        {error && (
+          <div style={{
+            marginTop: '16px',
+            padding: '10px',
+            borderRadius: '8px',
+            background: theme === 'dark' ? '#3f1d1d' : '#fee2e2',
+            color: theme === 'dark' ? '#fca5a5' : '#b91c1c',
+            fontSize: '13px',
+          }}>
+            {error}
+          </div>
         )}
 
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '500' }}>
-            Email
-          </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{
-              width: '100%',
-              padding: '10px',
-              border: '1px solid #ddd',
-              borderRadius: '6px',
-              fontSize: '14px',
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '500' }}>
-            Password
-          </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{
-              width: '100%',
-              padding: '10px',
-              border: '1px solid #ddd',
-              borderRadius: '6px',
-              fontSize: '14px',
-            }}
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: '12px',
-            backgroundColor: '#007bff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            fontSize: '16px',
-            fontWeight: '500',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1,
-          }}
-        >
-          {loading ? 'Please wait...' : isSignup ? 'Sign Up' : 'Log In'}
-        </button>
-      </form>
-
-      {error && (
+        {/* Switch Link */}
         <div style={{
-          marginTop: '15px',
-          padding: '10px',
-          backgroundColor: '#fee',
-          border: '1px solid #fcc',
-          borderRadius: '6px',
-          color: '#c33',
+          marginTop: '24px',
+          textAlign: 'center',
           fontSize: '14px',
+          color: c.textSecondary,
         }}>
-          {error}
+          {isSignup ? (
+            <>
+              Already have an account?{' '}
+              <button onClick={() => setIsSignup(false)} style={{
+                background: 'none',
+                border: 'none',
+                color: c.accent,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}>Sign In</button>
+            </>
+          ) : (
+            <>
+              New to CourseCompanion?{' '}
+              <button onClick={() => setIsSignup(true)} style={{
+                background: 'none',
+                border: 'none',
+                color: c.accent,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}>Sign Up</button>
+            </>
+          )}
         </div>
-      )}
-
-      <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '14px' }}>
-        {isSignup ? (
-          <>
-            Already have an account?{' '}
-            <button
-              onClick={() => setIsSignup(false)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#007bff',
-                cursor: 'pointer',
-                textDecoration: 'underline',
-              }}
-            >
-              Log In
-            </button>
-          </>
-        ) : (
-          <>
-            Don't have an account?{' '}
-            <button
-              onClick={() => setIsSignup(true)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#007bff',
-                cursor: 'pointer',
-                textDecoration: 'underline',
-              }}
-            >
-              Sign Up
-            </button>
-          </>
-        )}
       </div>
     </div>
   );

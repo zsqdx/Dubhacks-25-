@@ -7,7 +7,7 @@ interface CanvasLoginProps {
   sessionId?: string;
 }
 
-export default function CanvasLogin({ initialToken, userId, sessionId }: CanvasLoginProps = {}) {
+export default function CanvasLogin({ initialToken, userId, sessionId }: CanvasLoginProps) {
   const [token, setToken] = useState(initialToken || '');
   const [courses, setCourses] = useState<CanvasCourse[]>([]);
   const [assignments, setAssignments] = useState<Map<number, CanvasAssignment[]>>(new Map());
@@ -20,6 +20,7 @@ export default function CanvasLogin({ initialToken, userId, sessionId }: CanvasL
     if (initialToken) {
       handleLogin();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialToken]);
 
   const handleLogin = async () => {
@@ -49,7 +50,11 @@ export default function CanvasLogin({ initialToken, userId, sessionId }: CanvasL
 
       setIsAuthenticated(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch courses. Check your token and make sure you have courses created.');
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to fetch courses. Check your token and make sure you have courses created.'
+      );
       setIsAuthenticated(false);
     } finally {
       setLoading(false);
@@ -64,7 +69,7 @@ export default function CanvasLogin({ initialToken, userId, sessionId }: CanvasL
       day: 'numeric',
       year: 'numeric',
       hour: 'numeric',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
 
@@ -72,26 +77,25 @@ export default function CanvasLogin({ initialToken, userId, sessionId }: CanvasL
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '20px' }}>
       <h2 style={{ marginBottom: '20px' }}>Your Canvas Courses</h2>
 
-      {loading && (
-        <p style={{ color: '#666' }}>Loading courses...</p>
-      )}
+      {loading && <p style={{ color: '#666' }}>Loading courses...</p>}
 
       {error && (
-        <div style={{
-          padding: '10px',
-          marginBottom: '20px',
-          backgroundColor: '#fee',
-          border: '1px solid #fcc',
-          borderRadius: '4px',
-          color: '#c33',
-        }}>
+        <div
+          style={{
+            padding: '10px',
+            marginBottom: '20px',
+            backgroundColor: '#fee',
+            border: '1px solid #fcc',
+            borderRadius: '4px',
+            color: '#c33',
+          }}
+        >
           {error}
         </div>
       )}
 
       {!loading && (
         <div>
-
           {courses.length === 0 ? (
             <p style={{ color: '#666' }}>No active courses found.</p>
           ) : (
@@ -108,9 +112,7 @@ export default function CanvasLogin({ initialToken, userId, sessionId }: CanvasL
                       backgroundColor: '#f9f9f9',
                     }}
                   >
-                    <h3 style={{ margin: '0 0 8px 0', color: '#333' }}>
-                      {course.name}
-                    </h3>
+                    <h3 style={{ margin: '0 0 8px 0', color: '#333' }}>{course.name}</h3>
                     <p style={{ margin: '4px 0 12px 0', color: '#666', fontSize: '14px' }}>
                       <strong>Course Code:</strong> {course.course_code}
                     </p>
@@ -121,7 +123,13 @@ export default function CanvasLogin({ initialToken, userId, sessionId }: CanvasL
                       </p>
                     ) : (
                       <div>
-                        <h4 style={{ margin: '12px 0 8px 0', color: '#555', fontSize: '16px' }}>
+                        <h4
+                          style={{
+                            margin: '12px 0 8px 0',
+                            color: '#555',
+                            fontSize: '16px',
+                          }}
+                        >
                           Assignments ({courseAssignments.length})
                         </h4>
                         <div style={{ display: 'grid', gap: '8px' }}>
@@ -135,17 +143,41 @@ export default function CanvasLogin({ initialToken, userId, sessionId }: CanvasL
                                 borderRadius: '4px',
                               }}
                             >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'start',
+                                }}
+                              >
                                 <div style={{ flex: 1 }}>
-                                  <p style={{ margin: '0 0 4px 0', fontWeight: '500', color: '#333' }}>
+                                  <p
+                                    style={{
+                                      margin: '0 0 4px 0',
+                                      fontWeight: 500,
+                                      color: '#333',
+                                    }}
+                                  >
                                     {assignment.name}
                                   </p>
-                                  <p style={{ margin: '0', fontSize: '13px', color: '#666' }}>
+                                  <p
+                                    style={{
+                                      margin: '0',
+                                      fontSize: '13px',
+                                      color: '#666',
+                                    }}
+                                  >
                                     Due: {formatDate(assignment.due_at)}
                                   </p>
                                 </div>
                                 <div style={{ textAlign: 'right', marginLeft: '10px' }}>
-                                  <p style={{ margin: '0', fontSize: '13px', color: '#666' }}>
+                                  <p
+                                    style={{
+                                      margin: '0',
+                                      fontSize: '13px',
+                                      color: '#666',
+                                    }}
+                                  >
                                     {assignment.points_possible} pts
                                   </p>
                                 </div>
